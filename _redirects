@@ -1,0 +1,4 @@
+# Redirect HTTP ke HTTPS (Cloudflare handles ini otomatis, tapi redundant safety)
+http://fauzandwip.dev/* https://fauzandwip.dev/:splat 301
+http://www.fauzandwip.dev/* https://fauzandwip.dev/:splat 301
+https://www.fauzandwip.dev/* https://fauzandwip.dev/:splat 301
