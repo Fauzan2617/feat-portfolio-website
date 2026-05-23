@@ -391,7 +391,7 @@ footer{border-top:1px solid var(--b1);padding:36px clamp(20px,5vw,80px);display:
           <div class="fgrp"><label class="flbl" for="fn">Full Name *</label><input type="text" id="fn" name="name" class="finp" placeholder="Nama Anda" required maxlength="80" autocomplete="name"></div>
           <div class="fgrp"><label class="flbl" for="fe">Email Address *</label><input type="email" id="fe" name="email" class="finp" placeholder="email@company.com" required maxlength="254" autocomplete="email"></div>
           <div class="fgrp"><label class="flbl" for="fs">Subject</label><input type="text" id="fs" name="subject" class="finp" placeholder="e.g. AI Project Collaboration" maxlength="120"></div>
-          <div class="fgrp"><label class="flbl" for="fm">Message *</label><textarea id="fm" name="message" class="ftxt" placeholder="Ceritakan project atau opportunity Anda..." required minlength="10" maxlength="2000"></textarea></div>
+          <div class="fgrp"><label class="flbl" for="fm">Message *</label><textarea id="fm" name="message" class="ftxt" placeholder="Ceritakan project atau opportunity Anda... (min. 10 karakter)" required minlength="10" maxlength="2000"></textarea></div>
           <div class="fhoney" aria-hidden="true"><input type="text" name="website" tabindex="-1" autocomplete="off"></div>
           <button type="submit" class="fsbtn" id="fsbtn">&#128274; Send Secure Message</button>
           <div class="fsec">&#128737; Form dilindungi rate limiting, honeypot, dan sanitization via Cloudflare Workers. Enkripsi HTTPS end-to-end.</div>
@@ -414,11 +414,19 @@ footer{border-top:1px solid var(--b1);padding:36px clamp(20px,5vw,80px);display:
 
 <script>
 // ================================================================
-//  CONFIG — GANTI URL ini setelah deploy Cloudflare Worker
-//  Cara dapat URL: jalankan "npx wrangler deploy" di folder backend
-//  Contoh: 'https://fauzan-portfolio-api.fauzandwip.workers.dev'
+//  ⚠️  KONFIGURASI WAJIB — GANTI SEBELUM PUSH KE GITHUB
+//
+//  Cara dapat URL Worker:
+//  1. Buka terminal di folder backend
+//  2. Jalankan: npm install
+//  3. Jalankan: npm run deploy
+//  4. Copy URL yang muncul, contoh:
+//     https://fauzan-portfolio-api.fauzandwip.workers.dev
+//  5. Paste di bawah ini, lalu push ulang ke GitHub
 // ================================================================
-const API_URL = 'https://fauzan-portfolio-api.mfauzandwiputera10.workers.dev';
+const API_URL = 'https://fauzan-portfolio-api.mfauzandwiputera10@gmail.com.workers.dev';
+// Contoh jika username Cloudflare kamu adalah "fauzandwip":
+// const API_URL = 'https://fauzan-portfolio-api.fauzandwip.workers.dev';
 
 // CUSTOM CURSOR
 const cur = document.getElementById('cur');
@@ -487,27 +495,80 @@ document.querySelectorAll('a[href^="#"]').forEach(a=>a.addEventListener('click',
   if(t)t.scrollIntoView({behavior:'smooth',block:'start'});
 }));
 
-// CONTACT FORM
+// CONTACT FORM — with robust error handling & debugging
 async function sendMsg(e){
   e.preventDefault();
-  const form=e.target,btn=document.getElementById('fsbtn'),msgEl=document.getElementById('fmsg');
-  if(form.website.value)return;
-  btn.disabled=true;btn.textContent='Sending...';
-  msgEl.className='fmsg';msgEl.textContent='';
-  const payload={name:form.name.value.trim(),email:form.email.value.trim(),subject:form.subject.value.trim()||'New message from portfolio',message:form.message.value.trim(),website:''};
-  try{
-    const res=await fetch(API_URL+'/contact',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
-    const data=await res.json();
-    if(res.ok&&data.success){
-      msgEl.className='fmsg ok';
-      msgEl.textContent="Message sent! I'll get back to you within 24-48 hours.";
-      form.reset();
-    }else{throw new Error(data.error||'Something went wrong.');}
-  }catch(err){
+  const form=e.target, btn=document.getElementById('fsbtn'), msgEl=document.getElementById('fmsg');
+  if(form.website.value) return;
+  btn.disabled=true; btn.textContent='Sending...';
+  msgEl.className='fmsg'; msgEl.textContent='';
+  
+  const payload = {
+    name:    form.name.value.trim(),
+    email:   form.email.value.trim(),
+    subject: form.subject.value.trim() || 'New message from portfolio',
+    message: form.message.value.trim(),
+    website: ''
+  };
+  
+  // Validate API_URL is configured
+  if(API_URL.includes('GANTI_USERNAME')) {
     msgEl.className='fmsg er';
-    msgEl.textContent=(err.message||'Failed to send. Please email me directly.');
-  }finally{
-    btn.disabled=false;btn.textContent='Send Secure Message';
+    msgEl.textContent='⚠️ API_URL belum diupdate. Edit const API_URL di index.html.';
+    btn.disabled=false; btn.textContent='Send Secure Message';
+    return;
+  }
+  
+  try {
+    console.log('Sending to:', API_URL+'/contact');
+    
+    const res = await fetch(API_URL+'/contact', {
+      method:  'POST',
+      headers: {'Content-Type':'application/json'},
+      body:    JSON.stringify(payload)
+    });
+    
+    console.log('Response status:', res.status);
+    console.log('Response headers:', [...res.headers.entries()]);
+    
+    // Get raw text first, then try parse as JSON
+    const text = await res.text();
+    console.log('Raw response body:', text);
+    
+    let data;
+    if(!text || text.trim() === '') {
+      throw new Error(`Worker returned EMPTY response (status ${res.status}). Worker belum di-redeploy atau crash. Cek Cloudflare dashboard → Workers → Logs.`);
+    }
+    
+    try {
+      data = JSON.parse(text);
+    } catch(parseErr) {
+      throw new Error(`Worker mengembalikan response non-JSON (status ${res.status}): ${text.slice(0, 200)}`);
+    }
+    
+    if(res.ok && data.success) {
+      msgEl.className='fmsg ok';
+      msgEl.textContent = "✅ Message sent! I'll get back to you within 24-48 hours.";
+      form.reset();
+    } else {
+      // Show specific validation errors if available
+      let errorMsg = data.error || `HTTP ${res.status}`;
+      if(data.details && Array.isArray(data.details) && data.details.length > 0) {
+        errorMsg = data.details.map(d => `${d.field}: ${d.msg}`).join(' | ');
+      }
+      throw new Error(errorMsg);
+    }
+    
+  } catch(err) {
+    console.error('Contact form error:', err);
+    let errMsg = err.message || 'Unknown error';
+    if(errMsg.includes('Failed to fetch') || errMsg.includes('NetworkError')) {
+      errMsg = '❌ Cannot connect to Worker. Cek: (1) Worker sudah di-deploy? (2) API_URL benar?';
+    }
+    msgEl.className='fmsg er';
+    msgEl.textContent = errMsg;
+  } finally {
+    btn.disabled=false; btn.textContent='Send Secure Message';
   }
 }
 </script>
